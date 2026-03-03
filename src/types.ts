@@ -1,6 +1,7 @@
-export type AppMode = "home" | "flash-write" | "mcq" | "library" | "stats" | "about" | "synonyms" | "topics" | "manage" | "auth" | "rapid" | "leaderboard";
+export type AppMode = "home" | "flash-write" | "mcq" | "library" | "stats" | "about" | "synonyms" | "topics" | "manage" | "rapid" | "leaderboard";
 
 export interface UserStats {
+  userId: string;
   totalAttempts: number;
   correctAttempts: number;
   streak: number;

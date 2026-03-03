@@ -9,6 +9,7 @@ import {
   ArrowRight, 
   RotateCcw, 
   Volume2, 
+  VolumeX,
   X, 
   Check,
   ChevronRight,
@@ -166,12 +167,12 @@ const playSound = (type: "correct" | "wrong" | "skip") => {
 export default function App() {
   const [mode, setMode] = useState<AppMode>("home");
   const [isSyncing, setIsSyncing] = useState(false);
-  const [user, setUser] = useState<any>(null);
   const [showDailyChallenge, setShowDailyChallenge] = useState(false);
   const [stats, setStats] = useState<UserStats>(() => {
     const saved = localStorage.getItem("spellmaster_stats");
     if (saved) return JSON.parse(saved);
     return {
+      userId: crypto.randomUUID(),
       totalAttempts: 0,
       correctAttempts: 0,
       streak: 0,
@@ -185,40 +186,25 @@ export default function App() {
     };
   });
 
-  // Handle Auth State
-  useEffect(() => {
-    if (!isSupabaseConfigured()) return;
-    
-    supabase!.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-    });
-
-    const { data: { subscription } } = supabase!.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
   useEffect(() => {
     const today = new Date().toISOString().split('T')[0];
-    if (user && stats.lastDailyChallengeDate !== today) {
+    if (stats.displayName !== "Guest User" && stats.lastDailyChallengeDate !== today) {
       const timer = setTimeout(() => setShowDailyChallenge(true), 1500);
       return () => clearTimeout(timer);
     }
-  }, [user, stats.lastDailyChallengeDate]);
+  }, [stats.displayName, stats.lastDailyChallengeDate]);
 
   // Load from Supabase on mount
   useEffect(() => {
     const loadSupabaseStats = async () => {
-      if (!isSupabaseConfigured() || !user) return;
+      if (!isSupabaseConfigured() || stats.displayName === "Guest User") return;
 
       try {
         setIsSyncing(true);
         const { data, error } = await supabase!
           .from('user_stats')
           .select('stats')
-          .eq('user_id', user.id)
+          .eq('user_id', stats.userId)
           .single();
 
         if (error && error.code !== 'PGRST116') {
@@ -234,20 +220,20 @@ export default function App() {
     };
 
     loadSupabaseStats();
-  }, [user]);
+  }, [stats.userId]);
 
   useEffect(() => {
     localStorage.setItem("spellmaster_stats", JSON.stringify(stats));
     
     // Sync to Supabase
     const syncToSupabase = async () => {
-      if (!isSupabaseConfigured() || !user) return;
+      if (!isSupabaseConfigured() || stats.displayName === "Guest User") return;
 
       try {
         await supabase!
           .from('user_stats')
           .upsert({ 
-            user_id: user.id, 
+            user_id: stats.userId, 
             stats: stats,
             updated_at: new Date().toISOString()
           }, { onConflict: 'user_id' });
@@ -258,7 +244,7 @@ export default function App() {
 
     const timeoutId = setTimeout(syncToSupabase, 2000); // Debounce sync
     return () => clearTimeout(timeoutId);
-  }, [stats, user]);
+  }, [stats]);
 
   const updateStats = (word: string, isCorrect: boolean) => {
     setStats(prev => {
@@ -304,8 +290,12 @@ export default function App() {
     setStats(prev => ({ ...prev, dailyGoal: goal }));
   };
 
-  if (!user && isSupabaseConfigured()) {
-    return <AuthView onFinish={() => setMode("home")} />;
+  if (stats.displayName === "Guest User") {
+    return (
+      <WelcomeView 
+        onFinish={(name) => setStats(prev => ({ ...prev, displayName: name }))} 
+      />
+    );
   }
 
   return (
@@ -338,23 +328,13 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-3">
-            {user ? (
-              <button 
-                onClick={() => supabase!.auth.signOut()}
-                className="p-2 text-slate-400 hover:text-red-500 transition-colors"
-                title="Sign Out"
-              >
-                <LogOut size={20} />
-              </button>
-            ) : (
-              <button 
-                onClick={() => setMode("auth")}
-                className="p-2 text-slate-400 hover:text-blue-600 transition-colors"
-                title="Sign In"
-              >
-                <LogIn size={20} />
-              </button>
-            )}
+            <button 
+              onClick={() => setStats(prev => ({ ...prev, displayName: "Guest User" }))}
+              className="p-2 text-slate-400 hover:text-red-500 transition-colors"
+              title="Change Name"
+            >
+              <LogOut size={20} />
+            </button>
             {isSyncing && (
               <div className="flex items-center gap-1 text-[10px] font-bold text-blue-400 animate-pulse">
                 <RotateCcw size={10} className="animate-spin" /> SYNCING
@@ -417,17 +397,12 @@ export default function App() {
           )}
           {mode === "manage" && (
             <motion.div key="manage" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <ManageWords stats={stats} setStats={setStats} user={user} />
-            </motion.div>
-          )}
-          {mode === "auth" && (
-            <motion.div key="auth" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <AuthView onFinish={() => setMode("home")} />
+              <ManageWords stats={stats} setStats={setStats} />
             </motion.div>
           )}
           {mode === "rapid" && (
             <motion.div key="rapid" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <RapidMode onFinish={() => setMode("home")} stats={stats} onUpdateStats={updateStats} user={user} />
+              <RapidMode onFinish={() => setMode("home")} stats={stats} onUpdateStats={updateStats} />
             </motion.div>
           )}
           {mode === "leaderboard" && (
@@ -445,18 +420,13 @@ export default function App() {
 
       {/* Mobile Nav */}
       <div className="md:hidden fixed bottom-6 left-4 right-4 z-50">
-        <div className="bg-white shadow-2xl shadow-slate-200 border border-slate-100 rounded-2xl p-2 flex items-center justify-around backdrop-blur-lg bg-white/90">
+        <div className="bg-white shadow-2xl shadow-slate-200 border border-slate-100 rounded-2xl p-2 flex items-center justify-around backdrop-blur-lg bg-white/90 overflow-x-auto no-scrollbar">
           <MobileNavButton active={mode === "home"} onClick={() => setMode("home")} icon={<History size={20} />} />
           <MobileNavButton active={mode === "flash-write"} onClick={() => setMode("flash-write")} icon={<Zap size={20} />} />
           <MobileNavButton active={mode === "mcq"} onClick={() => setMode("mcq")} icon={<CheckCircle2 size={20} />} />
-          <MobileNavButton active={mode === "synonyms"} onClick={() => setMode("synonyms")} icon={<Sparkles size={20} />} />
-          <MobileNavButton active={mode === "topics"} onClick={() => setMode("topics")} icon={<Layers size={20} />} />
           <MobileNavButton active={mode === "rapid"} onClick={() => setMode("rapid")} icon={<Timer size={20} />} />
           <MobileNavButton active={mode === "leaderboard"} onClick={() => setMode("leaderboard")} icon={<Award size={20} />} />
-          <MobileNavButton active={mode === "library"} onClick={() => setMode("library")} icon={<BookOpen size={20} />} />
-          <MobileNavButton active={mode === "manage"} onClick={() => setMode("manage")} icon={<Plus size={20} />} />
           <MobileNavButton active={mode === "stats"} onClick={() => setMode("stats")} icon={<BarChart3 size={20} />} />
-          <MobileNavButton active={mode === "about"} onClick={() => setMode("about")} icon={<User size={20} />} />
         </div>
       </div>
     </div>
@@ -507,7 +477,7 @@ function Dashboard({ stats, onStart }: { stats: UserStats, onStart: (mode: AppMo
           <motion.h2 
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="text-5xl font-black text-slate-900 tracking-tight leading-none"
+            className="text-3xl md:text-5xl font-black text-slate-900 tracking-tight leading-tight md:leading-none"
           >
             Welcome back, <span className="text-emerald-600">{stats.displayName.split(' ')[0]}!</span>
           </motion.h2>
@@ -671,24 +641,26 @@ function FlashWriteMode({ onFinish, onUpdateStats, customWords = [] }: { onFinis
   const [input, setInput] = useState("");
   const [feedback, setFeedback] = useState<"correct" | "wrong" | null>(null);
   const [isRevealing, setIsRevealing] = useState(false);
+  const [isVoiceEnabled, setIsVoiceEnabled] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const currentWord = words[currentIndex];
 
   useEffect(() => {
     if (showWord) {
+      if (isVoiceEnabled) speak(currentWord.word);
       const timer = setTimeout(() => {
         setShowWord(false);
-      }, 1200);
+      }, 1500);
       return () => clearTimeout(timer);
     }
-  }, [currentIndex, showWord]);
+  }, [currentIndex, showWord, isVoiceEnabled]);
 
   useEffect(() => {
     if (!showWord && !feedback && !isRevealing) {
       const timer = setTimeout(() => {
         inputRef.current?.focus();
-      }, 50);
+      }, 100);
       return () => clearTimeout(timer);
     }
   }, [showWord, feedback, isRevealing]);
@@ -749,9 +721,21 @@ function FlashWriteMode({ onFinish, onUpdateStats, customWords = [] }: { onFinis
   return (
     <div className="max-w-2xl mx-auto space-y-8">
       <div className="flex items-center justify-between">
-        <button onClick={onFinish} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
-          <X size={24} />
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={onFinish} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
+            <X size={24} />
+          </button>
+          <button 
+            onClick={() => setIsVoiceEnabled(!isVoiceEnabled)}
+            className={cn(
+              "p-2 rounded-full transition-all",
+              isVoiceEnabled ? "bg-blue-100 text-blue-600" : "bg-slate-100 text-slate-400"
+            )}
+            title={isVoiceEnabled ? "Voice On" : "Voice Off"}
+          >
+            {isVoiceEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+          </button>
+        </div>
         <div className="flex items-center gap-4">
           <div className="h-2 w-48 bg-slate-200 rounded-full overflow-hidden">
             <motion.div 
@@ -764,7 +748,7 @@ function FlashWriteMode({ onFinish, onUpdateStats, customWords = [] }: { onFinis
         </div>
       </div>
 
-      <div className="bg-white p-12 rounded-[40px] border border-slate-200 shadow-xl shadow-slate-200/50 flex flex-col items-center justify-center min-h-[400px] relative overflow-hidden">
+      <div className="bg-white p-6 md:p-12 rounded-[32px] md:rounded-[40px] border border-slate-200 shadow-xl shadow-slate-200/50 flex flex-col items-center justify-center min-h-[300px] md:min-h-[400px] relative overflow-hidden">
         <AnimatePresence mode="wait">
           {showWord ? (
             <motion.div
@@ -773,7 +757,7 @@ function FlashWriteMode({ onFinish, onUpdateStats, customWords = [] }: { onFinis
               animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
               exit={{ opacity: 0, scale: 1.1, filter: "blur(20px)" }}
               transition={{ duration: 0.4, ease: "easeOut" }}
-              className="text-6xl font-black tracking-tight text-slate-900 text-center"
+              className="text-4xl md:text-6xl font-black tracking-tight text-slate-900 text-center px-4"
             >
               {currentWord.word}
             </motion.div>
@@ -782,7 +766,7 @@ function FlashWriteMode({ onFinish, onUpdateStats, customWords = [] }: { onFinis
               key="input"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="w-full max-w-md space-y-8"
+              className="w-full max-w-md space-y-6 md:space-y-8"
             >
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="relative">
@@ -794,7 +778,7 @@ function FlashWriteMode({ onFinish, onUpdateStats, customWords = [] }: { onFinis
                     disabled={!!feedback}
                     placeholder="Type the word..."
                     className={cn(
-                      "w-full bg-slate-50 border-2 border-slate-200 rounded-2xl px-6 py-5 text-2xl font-bold text-center transition-all outline-none",
+                      "w-full bg-slate-50 border-2 border-slate-200 rounded-2xl px-4 md:px-6 py-4 md:py-5 text-xl md:text-2xl font-bold text-center transition-all outline-none",
                       feedback === "correct" && "border-emerald-500 bg-emerald-50 text-emerald-700",
                       feedback === "wrong" && "border-red-500 bg-red-50 text-red-700",
                       !feedback && "focus:border-blue-500 focus:bg-white focus:shadow-xl focus:shadow-blue-500/10"
@@ -989,16 +973,16 @@ function MCQMode({ onFinish, onUpdateStats, customWords = [] }: { onFinish: () =
         </div>
       </div>
 
-      <div className="bg-white p-12 rounded-[40px] border border-slate-200 shadow-xl shadow-slate-200/50 space-y-12 min-h-[400px]">
+      <div className="bg-white p-6 md:p-12 rounded-[32px] md:rounded-[40px] border border-slate-200 shadow-xl shadow-slate-200/50 space-y-8 md:space-y-12 min-h-[300px] md:min-h-[400px]">
         <div className="text-center space-y-4">
-          <span className="text-xs font-bold text-blue-600 uppercase tracking-[0.2em]">Select the correct spelling</span>
-          <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
-            <p className="text-xl font-medium text-slate-600 italic">"{currentWord.sentence.replace(currentWord.word, "_______")}"</p>
-            <p className="mt-2 text-sm font-bold text-slate-400">Meaning: {currentWord.meaning_bn}</p>
+          <span className="text-[10px] md:text-xs font-bold text-blue-600 uppercase tracking-[0.2em]">Select the correct spelling</span>
+          <div className="p-4 md:p-6 bg-slate-50 rounded-2xl md:rounded-3xl border border-slate-100">
+            <p className="text-lg md:text-xl font-medium text-slate-600 italic">"{currentWord.sentence.replace(currentWord.word, "_______")}"</p>
+            <p className="mt-2 text-xs font-bold text-slate-400">Meaning: {currentWord.meaning_bn}</p>
           </div>
         </div>
 
-        <div className="grid gap-4">
+        <div className="grid gap-3 md:gap-4">
           {options.map((option, idx) => (
             <motion.button
               key={option}
@@ -1007,7 +991,7 @@ function MCQMode({ onFinish, onUpdateStats, customWords = [] }: { onFinish: () =
               transition={{ delay: idx * 0.1 }}
               onClick={() => handleSelect(option)}
               className={cn(
-                "w-full p-6 rounded-2xl text-xl font-bold transition-all border-2 text-left flex items-center justify-between group",
+                "w-full p-4 md:p-6 rounded-xl md:rounded-2xl text-lg md:text-xl font-bold transition-all border-2 text-left flex items-center justify-between group",
                 !selectedOption && "bg-white border-slate-100 hover:border-blue-500 hover:bg-blue-50/50 hover:shadow-lg hover:shadow-blue-500/5",
                 selectedOption === option && isCorrect && "bg-emerald-50 border-emerald-500 text-emerald-700",
                 selectedOption === option && !isCorrect && "bg-red-50 border-red-500 text-red-700",
@@ -1255,90 +1239,69 @@ function AboutView() {
   );
 }
 
-// --- Auth View ---
-function AuthView({ onFinish }: { onFinish: () => void }) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
+// --- Welcome View ---
+function WelcomeView({ onFinish }: { onFinish: (name: string) => void }) {
+  const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [isSignUp, setIsSignUp] = useState(false);
 
-  const handleAuth = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setError(null);
-
-    try {
-      if (isSignUp) {
-        const { error } = await supabase!.auth.signUp({ email, password });
-        if (error) throw error;
-        alert("Check your email for confirmation!");
-      } else {
-        const { error } = await supabase!.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-      }
-      onFinish();
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+    if (name.trim().length < 2) {
+      setError("Please enter a valid name (at least 2 characters)");
+      return;
     }
+    onFinish(name.trim());
   };
 
   return (
     <div className="max-w-md mx-auto mt-12">
-      <div className="bg-white p-8 rounded-[32px] border border-slate-200 shadow-xl space-y-8">
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-white p-10 rounded-[40px] border border-slate-200 shadow-2xl space-y-8 relative overflow-hidden"
+      >
+        <div className="absolute top-0 left-0 w-full h-2 bg-blue-600" />
+        
         <div className="text-center space-y-2">
           <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center text-white mx-auto shadow-lg shadow-blue-200 mb-4">
             <Zap size={32} fill="currentColor" />
           </div>
-          <h2 className="text-3xl font-black text-slate-900">{isSignUp ? "Create Account" : "Welcome Back"}</h2>
-          <p className="text-slate-500">Sync your progress across all devices.</p>
+          <h2 className="text-3xl font-black text-slate-900">Welcome!</h2>
+          <p className="text-slate-500 font-medium">Enter your name to start practicing.</p>
         </div>
 
-        <form onSubmit={handleAuth} className="space-y-4">
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Email Address</label>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Your Name</label>
             <input 
-              type="email" 
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all font-medium"
-              placeholder="name@example.com"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Password</label>
-            <input 
-              type="password" 
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all font-medium"
-              placeholder="••••••••"
+              type="text" 
+              required 
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium text-center text-xl"
+              placeholder="e.g. Tarik"
             />
           </div>
 
-          {error && <p className="text-sm font-bold text-red-500 text-center">{error}</p>}
+          {error && (
+            <div className="p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-sm font-bold text-center animate-shake">
+              {error}
+            </div>
+          )}
 
           <button 
-            disabled={loading}
-            className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 disabled:opacity-50"
+            type="submit" 
+            className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black hover:bg-blue-700 transition-all shadow-xl shadow-blue-200 flex items-center justify-center gap-2"
           >
-            {loading ? "Processing..." : (isSignUp ? "Sign Up" : "Sign In")}
+            Get Started <ArrowRight size={20} />
           </button>
         </form>
 
-        <div className="text-center">
-          <button 
-            onClick={() => setIsSignUp(!isSignUp)}
-            className="text-sm font-bold text-blue-600 hover:text-blue-700 transition-colors"
-          >
-            {isSignUp ? "Already have an account? Sign In" : "Don't have an account? Sign Up"}
-          </button>
-        </div>
-      </div>
+        <p className="text-[10px] text-slate-400 text-center font-bold uppercase tracking-widest">
+          Your progress will be synced automatically
+        </p>
+      </motion.div>
     </div>
   );
 }
@@ -1395,6 +1358,12 @@ function SynonymsMode({ onFinish }: { onFinish: () => void }) {
         <AnimatePresence mode="wait">
           <motion.div
             key={currentIndex}
+            drag="x"
+            dragConstraints={{ left: 0, right: 0 }}
+            onDragEnd={(_, info) => {
+              if (info.offset.x > 100) prev();
+              else if (info.offset.x < -100) next();
+            }}
             initial={{ x: direction * 300, opacity: 0, rotateY: 0, scale: 0.8 }}
             animate={{ x: 0, opacity: 1, rotateY: isFlipped ? 180 : 0, scale: 1 }}
             exit={{ x: -direction * 300, opacity: 0, scale: 0.8 }}
@@ -1403,7 +1372,7 @@ function SynonymsMode({ onFinish }: { onFinish: () => void }) {
             className="w-full h-full relative cursor-pointer preserve-3d"
           >
             {/* Front - Red Theme (Starting Point) */}
-            <div className={`absolute inset-0 bg-white rounded-[40px] border-4 border-red-50 shadow-2xl flex flex-col items-center justify-center p-12 backface-hidden transition-all group overflow-hidden ${isFlipped ? 'invisible' : ''}`}>
+            <div className={`absolute inset-0 bg-white rounded-[32px] md:rounded-[40px] border-4 border-red-50 shadow-2xl flex flex-col items-center justify-center p-6 md:p-12 backface-hidden transition-all group overflow-hidden ${isFlipped ? 'invisible' : ''}`}>
               {/* Decorative Background Elements */}
               <div className="absolute -top-20 -right-20 w-64 h-64 bg-red-50 rounded-full blur-3xl opacity-50 group-hover:scale-110 transition-transform duration-700" />
               <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-red-50 rounded-full blur-3xl opacity-50 group-hover:scale-110 transition-transform duration-700" />
@@ -1413,19 +1382,19 @@ function SynonymsMode({ onFinish }: { onFinish: () => void }) {
                 transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
                 className="relative z-10 flex flex-col items-center"
               >
-                <span className="text-xs font-bold text-red-400 uppercase tracking-[0.4em] mb-6">Common Word</span>
-                <h3 className="text-7xl font-black text-slate-900 text-center tracking-tight leading-none mb-4">{current.word}</h3>
-                <div className="h-1 w-24 bg-red-100 rounded-full mb-12" />
+                <span className="text-[10px] md:text-xs font-bold text-red-400 uppercase tracking-[0.4em] mb-4 md:mb-6">Common Word</span>
+                <h3 className="text-4xl md:text-7xl font-black text-slate-900 text-center tracking-tight leading-none mb-4">{current.word}</h3>
+                <div className="h-1 w-16 md:w-24 bg-red-100 rounded-full mb-8 md:mb-12" />
                 
-                <div className="flex items-center gap-3 text-red-300 bg-red-50/50 px-6 py-3 rounded-full">
-                  <Sparkles size={18} className="animate-pulse" />
-                  <span className="text-sm font-bold uppercase tracking-widest">Tap to upgrade</span>
+                <div className="flex items-center gap-3 text-red-300 bg-red-50/50 px-4 md:px-6 py-2 md:py-3 rounded-full">
+                  <Sparkles size={16} className="animate-pulse" />
+                  <span className="text-xs font-bold uppercase tracking-widest">Tap to upgrade</span>
                 </div>
               </motion.div>
             </div>
 
             {/* Back - Green Theme (Advanced Upgrade) */}
-            <div className={`absolute inset-0 bg-emerald-600 rounded-[40px] shadow-2xl flex flex-col items-center justify-center p-12 backface-hidden rotate-y-180 transition-all group overflow-hidden ${!isFlipped ? 'invisible' : ''}`}>
+            <div className={`absolute inset-0 bg-emerald-600 rounded-[32px] md:rounded-[40px] shadow-2xl flex flex-col items-center justify-center p-6 md:p-12 backface-hidden rotate-y-180 transition-all group overflow-hidden ${!isFlipped ? 'invisible' : ''}`}>
               {/* Decorative Background Elements */}
               <div className="absolute -top-20 -left-20 w-80 h-80 bg-emerald-500 rounded-full blur-3xl opacity-40 group-hover:scale-110 transition-transform duration-700" />
               <div className="absolute -bottom-20 -right-20 w-80 h-80 bg-emerald-700 rounded-full blur-3xl opacity-40 group-hover:scale-110 transition-transform duration-700" />
@@ -1435,16 +1404,16 @@ function SynonymsMode({ onFinish }: { onFinish: () => void }) {
                 transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
                 className="relative z-10 flex flex-col items-center w-full"
               >
-                <span className="text-xs font-bold text-emerald-200 uppercase tracking-[0.4em] mb-6">Advanced Synonym</span>
-                <h3 className="text-7xl font-black text-white text-center tracking-tight leading-none mb-2 drop-shadow-lg">{current.synonym}</h3>
-                <p className="text-3xl font-bold text-emerald-100 mb-10">{current.meaning_bn}</p>
+                <span className="text-[10px] md:text-xs font-bold text-emerald-200 uppercase tracking-[0.4em] mb-4 md:mb-6">Advanced Synonym</span>
+                <h3 className="text-4xl md:text-7xl font-black text-white text-center tracking-tight leading-none mb-2 drop-shadow-lg">{current.synonym}</h3>
+                <p className="text-xl md:text-3xl font-bold text-emerald-100 mb-6 md:mb-10">{current.meaning_bn}</p>
                 
-                <div className="w-full p-8 bg-white/10 backdrop-blur-md rounded-[32px] border border-white/20 shadow-inner">
-                  <div className="flex items-center gap-2 mb-3 text-emerald-200">
-                    <Info size={16} />
-                    <span className="text-[10px] font-bold uppercase tracking-widest">Contextual Example</span>
+                <div className="w-full p-6 md:p-8 bg-white/10 backdrop-blur-md rounded-2xl md:rounded-[32px] border border-white/20 shadow-inner">
+                  <div className="flex items-center gap-2 mb-2 md:mb-3 text-emerald-200">
+                    <Info size={14} />
+                    <span className="text-[8px] md:text-[10px] font-bold uppercase tracking-widest">Contextual Example</span>
                   </div>
-                  <p className="text-white text-center text-lg italic leading-relaxed font-medium">
+                  <p className="text-white text-center text-sm md:text-lg italic leading-relaxed font-medium">
                     "{current.sentence}"
                   </p>
                 </div>
@@ -1454,15 +1423,15 @@ function SynonymsMode({ onFinish }: { onFinish: () => void }) {
         </AnimatePresence>
       </div>
 
-      <div className="flex items-center justify-center gap-6">
-        <button onClick={prev} className="p-5 bg-white border border-slate-200 rounded-3xl text-slate-600 hover:border-red-500 hover:text-red-600 transition-all shadow-sm hover:shadow-xl hover:shadow-red-500/5">
-          <ChevronLeft size={32} />
+      <div className="flex items-center justify-center gap-4 md:gap-6">
+        <button onClick={prev} className="p-4 md:p-5 bg-white border border-slate-200 rounded-2xl md:rounded-3xl text-slate-600 hover:border-red-500 hover:text-red-600 transition-all shadow-sm hover:shadow-xl hover:shadow-red-500/5">
+          <ChevronLeft size={24} className="md:size-32" />
         </button>
-        <div className="px-8 py-4 bg-slate-100 rounded-2xl font-black text-slate-500 tracking-widest text-sm">
-          {currentIndex + 1} <span className="text-slate-300 mx-2">/</span> {ADVANCED_SYNONYMS.length}
+        <div className="px-6 md:px-8 py-3 md:py-4 bg-slate-100 rounded-xl md:rounded-2xl font-black text-slate-500 tracking-widest text-xs md:text-sm">
+          {currentIndex + 1} <span className="text-slate-300 mx-1 md:mx-2">/</span> {ADVANCED_SYNONYMS.length}
         </div>
-        <button onClick={next} className="p-5 bg-white border border-slate-200 rounded-3xl text-slate-600 hover:border-emerald-500 hover:text-emerald-600 transition-all shadow-sm hover:shadow-xl hover:shadow-emerald-500/5">
-          <ChevronRight size={32} />
+        <button onClick={next} className="p-4 md:p-5 bg-white border border-slate-200 rounded-2xl md:rounded-3xl text-slate-600 hover:border-emerald-500 hover:text-emerald-600 transition-all shadow-sm hover:shadow-xl hover:shadow-emerald-500/5">
+          <ChevronRight size={24} className="md:size-32" />
         </button>
       </div>
     </div>
@@ -1543,7 +1512,7 @@ function TopicsMode({ onFinish }: { onFinish: () => void }) {
 }
 
 // --- Manage Words ---
-function ManageWords({ stats, setStats, user }: { stats: UserStats, setStats: any, user: any }) {
+function ManageWords({ stats, setStats }: { stats: UserStats, setStats: any }) {
   const [inputText, setInputText] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -1572,18 +1541,6 @@ function ManageWords({ stats, setStats, user }: { stats: UserStats, setStats: an
     setIsProcessing(false);
     alert(`${newWords.length} words added successfully!`);
   };
-
-  if (!user) {
-    return (
-      <div className="max-w-2xl mx-auto text-center py-20 space-y-6">
-        <div className="w-20 h-20 bg-slate-100 rounded-3xl flex items-center justify-center text-slate-400 mx-auto">
-          <LogIn size={40} />
-        </div>
-        <h2 className="text-3xl font-black text-slate-900">Sign In Required</h2>
-        <p className="text-slate-500 max-w-md mx-auto">You need to be logged in to manage your custom word lists and sync them across devices.</p>
-      </div>
-    );
-  }
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
@@ -1700,7 +1657,7 @@ function DailyChallengePopup({ onStart, onClose }: { onStart: () => void, onClos
 }
 
 // --- Rapid Mode ---
-function RapidMode({ onFinish, stats, onUpdateStats, user }: { onFinish: () => void, stats: UserStats, onUpdateStats: (w: string, c: boolean) => void, user: any }) {
+function RapidMode({ onFinish, stats, onUpdateStats }: { onFinish: () => void, stats: UserStats, onUpdateStats: (w: string, c: boolean) => void }) {
   const [timeLeft, setTimeLeft] = useState(60); // Default 1 min
   const [isActive, setIsActive] = useState(false);
   const [score, setScore] = useState(0);
@@ -1748,14 +1705,14 @@ function RapidMode({ onFinish, stats, onUpdateStats, user }: { onFinish: () => v
     setIsActive(false);
     setIsFinished(true);
     
-    if (user && isSupabaseConfigured()) {
+    if (isSupabaseConfigured()) {
       const today = new Date().toISOString().split('T')[0];
       // Save score to leaderboard
       await supabase!.from('daily_scores').upsert({
-        user_id: user.id,
+        user_id: stats.userId,
         score: score,
         date: today,
-        user_name: stats.displayName || user.email?.split('@')[0] || 'Anonymous'
+        user_name: stats.displayName || 'Anonymous'
       });
     }
   };
@@ -1908,26 +1865,26 @@ function RapidMode({ onFinish, stats, onUpdateStats, user }: { onFinish: () => v
         key={currentIndex}
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-white p-12 rounded-[48px] border border-slate-200 shadow-2xl space-y-10 text-center relative overflow-hidden"
+        className="bg-white p-6 md:p-12 rounded-[32px] md:rounded-[48px] border border-slate-200 shadow-2xl space-y-8 md:space-y-10 text-center relative overflow-hidden"
       >
         {feedback && (
           <motion.div 
             initial={{ opacity: 0, scale: 0.5 }}
             animate={{ opacity: 1, scale: 1.2 }}
             className={cn(
-              "absolute top-10 right-10 w-16 h-16 rounded-full flex items-center justify-center text-white z-20",
+              "absolute top-6 right-6 md:top-10 md:right-10 w-12 h-12 md:w-16 md:h-16 rounded-full flex items-center justify-center text-white z-20",
               feedback === "correct" ? "bg-emerald-500" : "bg-red-500"
             )}
           >
-            {feedback === "correct" ? <Check size={32} /> : <X size={32} />}
+            {feedback === "correct" ? <Check size={24} className="md:size-32" /> : <X size={24} className="md:size-32" />}
           </motion.div>
         )}
 
         <div className="space-y-2">
-          <span className="text-xs font-bold text-blue-600 uppercase tracking-[0.3em]">
+          <span className="text-[10px] md:text-xs font-bold text-blue-600 uppercase tracking-[0.3em]">
             {currentQ.type === "write" ? "Type the Word" : "Choose Correct Spelling"}
           </span>
-          <h3 className="text-3xl font-bold text-slate-900">{currentQ.meaning_bn}</h3>
+          <h3 className="text-2xl md:text-3xl font-bold text-slate-900">{currentQ.meaning_bn}</h3>
         </div>
 
         {currentQ.type === "write" ? (
@@ -1936,7 +1893,7 @@ function RapidMode({ onFinish, stats, onUpdateStats, user }: { onFinish: () => v
               autoFocus
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              className="w-full text-4xl font-black text-center py-6 bg-slate-50 border-4 border-slate-100 rounded-[32px] focus:border-emerald-500 focus:bg-white outline-none transition-all uppercase tracking-widest"
+              className="w-full text-2xl md:text-4xl font-black text-center py-4 md:py-6 bg-slate-50 border-4 border-slate-100 rounded-2xl md:rounded-[32px] focus:border-emerald-500 focus:bg-white outline-none transition-all uppercase tracking-widest"
               placeholder="TYPE HERE..."
             />
             <button className="hidden" type="submit">Submit</button>
@@ -1948,7 +1905,7 @@ function RapidMode({ onFinish, stats, onUpdateStats, user }: { onFinish: () => v
                 key={i}
                 onClick={() => handleMcqSubmit(opt)}
                 className={cn(
-                  "w-full p-6 rounded-2xl text-xl font-bold transition-all border-2 text-left flex items-center gap-4",
+                  "w-full p-4 md:p-6 rounded-xl md:rounded-2xl text-lg md:text-xl font-bold transition-all border-2 text-left flex items-center gap-4",
                   !selectedMcq ? "bg-white border-slate-100 hover:border-emerald-500 hover:bg-emerald-50" :
                   opt === currentQ.word ? "bg-emerald-50 border-emerald-500 text-emerald-700" :
                   selectedMcq === opt ? "bg-red-50 border-red-500 text-red-700" : "bg-white border-slate-100 opacity-50"
@@ -1961,7 +1918,17 @@ function RapidMode({ onFinish, stats, onUpdateStats, user }: { onFinish: () => v
           </div>
         )}
 
-        <p className="text-slate-400 text-sm font-medium italic">"{currentQ.sentence}"</p>
+        {feedback ? (
+          <motion.p 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-slate-400 text-xs md:text-sm font-medium italic px-4"
+          >
+            "{currentQ.sentence}"
+          </motion.p>
+        ) : (
+          <div className="h-4 md:h-5" /> // Spacer to prevent layout shift
+        )}
       </motion.div>
     </div>
   );
