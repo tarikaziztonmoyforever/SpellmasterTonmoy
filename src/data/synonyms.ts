@@ -1,0 +1,58 @@
+export interface SynonymData {
+  word: string;
+  synonym: string;
+  meaning_bn: string;
+  sentence: string;
+}
+
+export const ADVANCED_SYNONYMS: SynonymData[] = [
+  { word: "Important", synonym: "Crucial", meaning_bn: "গুরুত্বপূর্ণ", sentence: "It is crucial to follow the safety guidelines." },
+  { word: "Important", synonym: "Significant", meaning_bn: "তাৎপর্যপূর্ণ", sentence: "The discovery of the new planet is significant for science." },
+  { word: "Big", synonym: "Substantial", meaning_bn: "বৃহৎ", sentence: "A substantial amount of money was donated to the charity." },
+  { word: "Big", synonym: "Immense", meaning_bn: "অত্যন্ত বড়", sentence: "The universe is immense and full of mysteries." },
+  { word: "Small", synonym: "Minimal", meaning_bn: "সর্বনিম্ন", sentence: "The damage to the car was minimal." },
+  { word: "Small", synonym: "Negligible", meaning_bn: "তুচ্ছ/অতি সামান্য", sentence: "The difference in price is negligible." },
+  { word: "Good", synonym: "Beneficial", meaning_bn: "উপকারী", sentence: "Regular exercise is beneficial for your health." },
+  { word: "Good", synonym: "Favorable", meaning_bn: "অনুকূল", sentence: "The weather conditions were favorable for the flight." },
+  { word: "Bad", synonym: "Detrimental", meaning_bn: "ক্ষতিকর", sentence: "Smoking is detrimental to your health." },
+  { word: "Bad", synonym: "Adverse", meaning_bn: "বিরূপ", sentence: "The drug can have adverse side effects." },
+  { word: "Show", synonym: "Demonstrate", meaning_bn: "প্রদর্শন করা", sentence: "The teacher will demonstrate how to solve the problem." },
+  { word: "Show", synonym: "Illustrate", meaning_bn: "ব্যাখ্যা করা/উদাহরণ দেওয়া", sentence: "The graphs illustrate the growth of the company." },
+  { word: "Get", synonym: "Obtain", meaning_bn: "অর্জন করা", sentence: "You can obtain a passport from the local office." },
+  { word: "Get", synonym: "Acquire", meaning_bn: "সংগ্রহ করা/অর্জন করা", sentence: "The company plans to acquire new technology." },
+  { word: "Help", synonym: "Assist", meaning_bn: "সহায়তা করা", sentence: "The nurse will assist the doctor during the surgery." },
+  { word: "Help", synonym: "Facilitate", meaning_bn: "সহজ করে তোলা", sentence: "The new software will facilitate communication between teams." },
+  { word: "Improve", synonym: "Enhance", meaning_bn: "উন্নত করা", sentence: "You can enhance your skills with practice." },
+  { word: "Improve", synonym: "Boost", meaning_bn: "বৃদ্ধি করা", sentence: "The marketing campaign will boost sales." },
+  { word: "Increase", synonym: "Escalate", meaning_bn: "বৃদ্ধি পাওয়া", sentence: "The conflict could escalate into a full-scale war." },
+  { word: "Increase", synonym: "Surge", meaning_bn: "হঠাৎ বৃদ্ধি পাওয়া", sentence: "There was a surge in demand for electric cars." },
+  { word: "Decrease", synonym: "Decline", meaning_bn: "হ্রাস পাওয়া", sentence: "The population of the city began to decline." },
+  { word: "Decrease", synonym: "Diminish", meaning_bn: "কমে যাওয়া", sentence: "The light began to diminish as the sun set." },
+  { word: "Problem", synonym: "Issue", meaning_bn: "সমস্যা", sentence: "The main issue is the lack of funding." },
+  { word: "Problem", synonym: "Obstacle", meaning_bn: "বাধা", sentence: "The language barrier was a major obstacle." },
+  { word: "Solution", synonym: "Remedy", meaning_bn: "সমাধান", sentence: "The best remedy for a cold is rest." },
+  { word: "Solution", synonym: "Resolution", meaning_bn: "সমাধান", sentence: "The resolution of the conflict took months." },
+  { word: "Change", synonym: "Alter", meaning_bn: "পরিবর্তন করা", sentence: "You can alter the settings to suit your needs." },
+  { word: "Change", synonym: "Modify", meaning_bn: "সংশোধন করা", sentence: "The architect had to modify the plans." },
+  { word: "Think", synonym: "Contemplate", meaning_bn: "গভীরভাবে ভাবা", sentence: "He sat quietly to contemplate his future." },
+  { word: "Think", synonym: "Consider", meaning_bn: "বিবেচনা করা", sentence: "Please consider my proposal carefully." },
+  { word: "Many", synonym: "Numerous", meaning_bn: "অসংখ্য", sentence: "There are numerous reasons to visit the city." },
+  { word: "Many", synonym: "A multitude of", meaning_bn: "বহু", sentence: "A multitude of people attended the concert." },
+  { word: "Few", synonym: "Scarce", meaning_bn: "দুর্লভ", sentence: "Water is scarce in the desert." },
+  { word: "Few", synonym: "Limited", meaning_bn: "সীমিত", sentence: "The number of tickets is limited." },
+  { word: "People", synonym: "Individuals", meaning_bn: "ব্যক্তিবর্গ", sentence: "Each individual has a unique perspective." },
+  { word: "People", synonym: "Citizens", meaning_bn: "নাগরিক", sentence: "The citizens voted in the election." },
+  { word: "Start", synonym: "Commence", meaning_bn: "শুরু করা", sentence: "The ceremony will commence at noon." },
+  { word: "Start", synonym: "Initiate", meaning_bn: "সূচনা করা", sentence: "The government will initiate new reforms." },
+  { word: "End", synonym: "Terminate", meaning_bn: "সমাপ্ত করা", sentence: "The contract will terminate next month." },
+  { word: "End", synonym: "Conclude", meaning_bn: "উপসংহার টানা/শেষ করা", sentence: "The meeting will conclude with a summary." },
+  { word: "Idea", synonym: "Notion", meaning_bn: "ধারণা", sentence: "I have a vague notion of how it works." },
+  { word: "Idea", synonym: "Concept", meaning_bn: "ধারণা", sentence: "The concept of time is difficult to define." },
+  { word: "Result", synonym: "Outcome", meaning_bn: "ফলাফল", sentence: "The outcome of the experiment was unexpected." },
+  { word: "Result", synonym: "Consequence", meaning_bn: "পরিণতি", sentence: "The consequence of his actions was severe." },
+  { word: "Cause", synonym: "Trigger", meaning_bn: "কারণ হওয়া", sentence: "The loud noise can trigger an alarm." },
+  { word: "Cause", synonym: "Induce", meaning_bn: "উদ্দীপিত করা", sentence: "The medicine can induce sleep." },
+  { word: "Need", synonym: "Necessity", meaning_bn: "প্রয়োজনীয়তা", sentence: "Food is a basic necessity of life." },
+  { word: "Need", synonym: "Requirement", meaning_bn: "চাহিদা", sentence: "The job has specific requirements." },
+  { word: "Use", synonym: "Utilize", meaning_bn: "ব্যবহার করা", sentence: "We should utilize all available resources." }
+];
